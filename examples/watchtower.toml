@@ -1,0 +1,28 @@
+# Single source for both native backends. Requires Python 3.11+ to render.
+network = "mainnet"
+
+[knots]
+host = "127.0.0.1"
+port = 8332
+cookie = "/absolute/path/to/knots/.cookie"
+
+[listeners]
+# Both public protocol listeners. Administration always stays on loopback.
+bind = "127.0.0.1"
+
+[teos]
+max_registered_users = 100
+renewal_slot_topups = false
+# api_port = 9814
+# rpc_port = 8814
+# internal_port = 50051
+# subscription_slots = 10000
+# subscription_duration = 4320
+
+[lnd]
+# Optional native-protocol support; requires the LND backend binaries.
+enabled = false
+# tower_port = 9911
+# rpc_port = 10009
+# rest_port = 8080
+# peer_port = 19735

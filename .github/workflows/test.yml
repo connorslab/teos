@@ -6,6 +6,12 @@ on:
 permissions:
   contents: read
 jobs:
+  configuration:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/test_configure.py
+      - run: python3 tools/configure.py examples/watchtower.toml --check
   rust:
     runs-on: ubuntu-24.04
     steps:

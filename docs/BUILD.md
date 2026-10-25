@@ -2,7 +2,8 @@
 
 The combined setup guide targets Linux. Other platforms have not been validated.
 Install Git, a C/C++ toolchain, pkg-config, OpenSSL development headers, Protocol
-Buffers (`protoc`), Rust through rustup, and Go **1.25.13**.
+Buffers (`protoc`), Rust through rustup, and Python **3.11+** for shared configuration. Go **1.25.13** is needed only
+for optional LND support.
 
 On Debian/Ubuntu, install native dependencies with:
 
@@ -17,6 +18,11 @@ Rust **1.88.0** is selected by `rust-toolchain.toml`. Run from the repository ro
 git clone https://github.com/connorslab/teos.git
 cd teos
 cargo build --locked --release --workspace
+```
+
+The default CLN/TEOS build is complete. For optional LND support, also run:
+
+```sh
 mkdir -p bin
 (cd lnd && GOTOOLCHAIN=local go build -mod=readonly \
   -tags='watchtowerrpc wtclientrpc signrpc walletrpc chainrpc invoicesrpc routerrpc' \

@@ -11,3 +11,6 @@ __pycache__/
 *.key
 /lnd/lnd
 /lnd/lncli
+
+/generated/
+/watchtower.toml
