@@ -9,7 +9,10 @@ available until the replacement has passed readiness and client checks.
 2. Build `teos-lnd` and `teos-lnd-migrate`. Export the dedicated tower identity
    **offline**, on a trusted machine, using its existing aezeed recovery words:
 
+   Create the empty destination directory with private permissions first.
+
    ```sh
+   install -d -m 700 /private/new-tower
    bin/teos-lnd-migrate --seed-file /private/tower-seed.json \
      --network mainnet --expected-pubkey EXISTING_TOWER_PUBLIC_KEY \
      --out /private/new-tower/tower.key
