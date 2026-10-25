@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 import tempfile
 import tomllib
@@ -23,22 +24,21 @@ class ConfigurationTests(unittest.TestCase):
     def test_shared_backend_and_network(self):
         result = module.render(self.config())
         teos = tomllib.loads(result["teos/teos.toml"])
-        lnd = result["lnd/lnd.conf"]
+        lnd = json.loads(result["lnd/tower.json"])
         self.assertEqual(teos["btc_rpc_connect"], "node.example")
         self.assertEqual(teos["btc_rpc_port"], 18443)
         self.assertEqual(teos["btc_network"], "regtest")
-        self.assertIn("bitcoin.regtest=1", lnd)
-        self.assertNotIn("bitcoin.mainnet=1", lnd)
-        self.assertIn("bitcoind.rpchost=node.example:18443", lnd)
-        self.assertIn("bitcoind.rpccookie=" + teos["btc_rpc_cookie"], lnd)
+        self.assertEqual(lnd["network"], "regtest")
+        self.assertEqual(lnd["rpc_url"], "http://node.example:18443")
+        self.assertEqual(lnd["cookie"], teos["btc_rpc_cookie"])
 
     def test_remote_listener_does_not_expose_admin(self):
         cfg = self.config()
         cfg["listeners"] = {"bind": "0.0.0.0"}
         result = module.render(cfg)
         self.assertEqual(tomllib.loads(result["teos/teos.toml"])["rpc_bind"], "127.0.0.1")
-        self.assertIn("rpclisten=127.0.0.1:", result["lnd/lnd.conf"])
-        self.assertIn("watchtower.listen=0.0.0.0:9911", result["lnd/lnd.conf"])
+        self.assertNotIn("rpc_listen", json.loads(result["lnd/tower.json"]))
+        self.assertEqual(json.loads(result["lnd/tower.json"])["listen"], "0.0.0.0:9911")
 
     def test_rejects_unsafe_or_ambiguous_input(self):
         for extra in [
@@ -57,7 +57,7 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_existing_unmanaged_config_preserved(self):
         with tempfile.TemporaryDirectory() as tmp:
-            target = Path(tmp)/"lnd/lnd.conf"
+            target = Path(tmp)/"lnd/tower.json"
             target.parent.mkdir()
             target.write_text("operator configuration")
             with self.assertRaises(ValueError):

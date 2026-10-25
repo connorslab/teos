@@ -6,7 +6,7 @@ through TEOS and an optional native-protocol backend. **Experimental; coverage i
 | Client | Backend | Protocol |
 | --- | --- | --- |
 | Core Lightning | `teosd` and `watchtower-client` | TEOS signed HTTP appointments, based on the BOLT13 proposal |
-| LND | Optional native LND tower | LND encrypted watchtower sessions |
+| LND | Optional `teos-lnd` backend | LND encrypted watchtower sessions |
 
 Both backends can run simultaneously, with separate identities, storage and
 listeners. Their protocols are not interchangeable. BOLT13 here means the proposal
@@ -25,20 +25,25 @@ Use an XBT-aware Knots RPC backend. Stock Bitcoin's SHA256 chain is incompatible
 even though the networks share their genesis hash. RPC and administrative APIs
 must remain private. No hosted endpoint is configured by default.
 
-## Implementation status
+## How LND support works
 
-LND support is optional, but currently runs through the full LND daemon. It is
-not yet a standalone tower component or an in-process TEOS feature. The shared
-configuration tool removes duplicate network and Knots RPC setup; it does not
-merge the runtimes. CLN-only installations do not need Go or LND binaries.
-See [architecture and remaining work](docs/ARCHITECTURE.md).
+Enable `[lnd].enabled` in the shared configuration to use `teos-lnd`, a dedicated
+Go watchtower executable. It reuses LND's native protocol, encrypted backup storage
+and justice-transaction construction without running LND's wallet, routing node,
+gossip service or administrative RPC server. It needs no wallet creation or unlock.
+
+`teosd` and `teos-lnd` share network and Knots RPC settings, but retain separate
+identities, databases and listeners. Both can run together or independently.
+See [architecture](docs/ARCHITECTURE.md) and [migration](docs/MIGRATION.md).
 
 ## Source layout
 
 - `teos/`: appointment server and administrative CLI.
 - `teos-common/`: shared protocol types and cryptography.
 - `watchtower-plugin/`: CLN client using `commitment_revocation`.
-- `lnd/`: complete XBT LND source, including native client and tower.
+- `lnd/cmd/teos-lnd/`: tower-only native LND backend.
+- `lnd/`: pinned upstream libraries and client tooling used by that backend; the
+  full LND daemon is not part of the normal tower build.
 - `vendor/`: pinned Rust consensus/header dependencies.
 - `examples/`: local-only configuration templates.
 

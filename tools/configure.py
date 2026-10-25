@@ -15,7 +15,7 @@ SCHEMA = {
     "listeners": {"bind"},
     "teos": {"api_port", "rpc_port", "internal_port", "max_registered_users",
              "subscription_slots", "subscription_duration", "renewal_slot_topups"},
-    "lnd": {"enabled", "tower_port", "rpc_port", "rest_port", "peer_port"},
+    "lnd": {"enabled", "tower_port", "data_dir"},
 }
 
 class ConfigurationError(ValueError):
@@ -59,7 +59,7 @@ def render(config):
     ports = {}
     for section, values, defaults in (
         ("teos", teos, {"api_port":9814, "rpc_port":8814, "internal_port":50051}),
-        ("lnd", lnd, {"tower_port":9911, "rpc_port":10009, "rest_port":8080, "peer_port":19735}),
+        ("lnd", lnd, {"tower_port":9911}),
     ):
         for key, default in defaults.items():
             ports[f"{section}.{key}"] = integer(values.get(key, default), f"{section}.{key}")
@@ -90,28 +90,25 @@ subscription_slots = {slots}
 subscription_duration = {duration}
 renewal_slot_topups = {str(topups).lower()}
 '''
-    native = f'''{MARKER}
-[Application Options]
-listen=127.0.0.1:{ports["lnd.peer_port"]}
-rpclisten=127.0.0.1:{ports["lnd.rpc_port"]}
-restlisten=127.0.0.1:{ports["lnd.rest_port"]}
-nobootstrap=1
-[Bitcoin]
-bitcoin.active=1
-bitcoin.{network}=1
-bitcoin.node=bitcoind
-[Bitcoind]
-bitcoind.rpchost={rpc_host}:{rpc_port}
-bitcoind.rpccookie={cookie}
-bitcoind.rpcpolling=1
-[Watchtower]
-watchtower.active=1
-watchtower.listen={bind}:{ports["lnd.tower_port"]}
-'''
+    data_dir = lnd.get("data_dir", "/var/lib/teos-lnd")
+    if not isinstance(data_dir, str) or not data_dir.startswith("/"):
+        raise ConfigurationError("lnd.data_dir must be an absolute POSIX path")
+    native = json.dumps({"_generated": MARKER, "network": network, "rpc_url": f"http://{rpc_host}:{rpc_port}",
+                         "cookie": cookie, "listen": f"{bind}:{ports['lnd.tower_port']}",
+                         "data_dir": data_dir}, indent=2) + "\n"
     result = {"teos/teos.toml": rust}
     if enabled:
-        result["lnd/lnd.conf"] = native
+        result["lnd/tower.json"] = native
     return result
+
+def is_generated(path):
+    text = path.read_text()
+    if path.name == "tower.json":
+        try:
+            return json.loads(text).get("_generated") == MARKER
+        except (ValueError, AttributeError):
+            return False
+    return text.startswith(MARKER + "\n")
 
 def write_configs(output, contents, overwrite=False):
     output = Path(output).absolute()
@@ -121,7 +118,7 @@ def write_configs(output, contents, overwrite=False):
         if any(p.is_symlink() for p in [target, *target.parents]):
             raise ConfigurationError("Output paths must not contain symbolic links")
         if target.exists():
-            if not overwrite or not target.is_file() or not target.read_text().startswith(MARKER + "\n"):
+            if not overwrite or not target.is_file() or not is_generated(target):
                 raise ConfigurationError("Existing configuration refused; --overwrite applies only to generated files")
     for rel, content in contents.items():
         target = output / rel

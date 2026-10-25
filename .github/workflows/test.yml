@@ -31,6 +31,6 @@ jobs:
         with:
           go-version: '1.25.13'
           cache-dependency-path: lnd/go.sum
-      - run: go build -mod=readonly -tags='watchtowerrpc wtclientrpc signrpc walletrpc chainrpc invoicesrpc routerrpc' ./cmd/lnd ./cmd/lncli
-      - run: go test -mod=readonly ./watchtower/...
+      - run: go build -mod=readonly ./cmd/teos-lnd ./cmd/teos-lnd-migrate
+      - run: go test -mod=readonly -timeout=180s ./cmd/teos-lnd ./cmd/teos-lnd-migrate ./watchtower/...
 

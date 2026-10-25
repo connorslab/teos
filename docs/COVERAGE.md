@@ -25,6 +25,19 @@ The software-only export retains unit tests and XBT mock-RPC fixtures. Host-spec
 live test harnesses and private operational records are not included; the live
 scenarios above are not automatically reproduced by the CI workflow.
 
+## Tower-only backend validation
+
+The tower-only executable adds tests for native encrypted session negotiation and
+backup acknowledgement, durable cursor/remedy storage across reopening, missed
+blocks, failed block reads, failed cursor writes, and replacement-chain replay.
+These tests are included in CI.
+
+An isolated regtest run additionally replayed an existing acknowledged breach
+fixture, reconstructed its expected recovery transaction, persisted the remedy,
+and caught up after restart, an RPC outage and a chain reorganization. This replay
+used an already-confirmed recovery transaction; it is not a new live-channel breach
+experiment and does not extend the channel-type coverage listed above.
+
 ## Not established
 
 - Exhaustive channel-type coverage, splicing coverage, and taproot breach recovery.

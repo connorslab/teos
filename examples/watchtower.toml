@@ -23,6 +23,4 @@ renewal_slot_topups = false
 # Optional native-protocol support; requires the LND backend binaries.
 enabled = false
 # tower_port = 9911
-# rpc_port = 10009
-# rest_port = 8080
-# peer_port = 19735
+# data_dir = "/var/lib/teos-lnd"

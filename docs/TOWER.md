@@ -25,11 +25,12 @@ python3 tools/configure.py watchtower.toml --output generated
 ```
 
 This creates `generated/teos/teos.toml` and, when LND support is enabled,
-`generated/lnd/lnd.conf`, with private
+`generated/lnd/tower.json`, with private
 file permissions on POSIX. It does not contact Knots, read the cookie, initialize
 wallets, change ownership or restart processes. Both service accounts need read
 access to the same RPC cookie file. Cookie authentication is the supported shared
-mode; custom username/password deployments can use the native configs instead.
+mode. For a dedicated RPC username/password, store `username:password` in a
+private cookie-format file and point both backends at that file.
 
 Install each generated file into its backend account's data directory with owner
 read/write permissions. Do not share the data directories themselves. For example,
@@ -83,49 +84,47 @@ Monitor remaining slots and define a capacity policy before onboarding.
 
 ## Optional native LND backend
 
-Skip this section unless `[lnd].enabled = true`. This currently runs the full LND
-daemon, including wallet initialization. It is not a standalone watchtower executable.
+Skip this section unless `[lnd].enabled = true`. Set `[lnd].data_dir` to an absolute
+private directory owned by the account running this backend. Generated
+`lnd/tower.json` can be installed anywhere readable by that account.
+
+For a **new tower only**, initialize its identity and start it:
 
 ```sh
-mkdir -m 700 "$HOME/.lnd-tower"
-cp generated/lnd/lnd.conf "$HOME/.lnd-tower/lnd.conf"
-chmod 600 "$HOME/.lnd-tower/lnd.conf"
+bin/teos-lnd --config generated/lnd/tower.json --init
+bin/teos-lnd --config generated/lnd/tower.json
 ```
 
-After installing the generated configuration, start:
+There is no wallet to create, unlock or fund. `--init` refuses an existing tower
+database. For an existing LND tower, follow MIGRATION.md instead to preserve its
+identity and sessions.
 
-```sh
-bin/lnd --lnddir="$HOME/.lnd-tower"
-```
+The data directory contains `tower.key`, `watchtower.db` and `status.json`.
+Back up the key and database together. Status includes the tower public key,
+scan height/hash, chain height, session/update counts, retained remedies and
+readiness. A monitor must require the process to be active, `ready=true`, and
+`updated` no older than 30 seconds. Status can remain on disk after termination;
+a stale file is never a healthy result.
 
-In another terminal initialize a **new** wallet:
+For remote clients set `[listeners].bind` and regenerate. Allow TCP 9911 only from
+intended clients. This is the encrypted native protocol, not HTTP. Give clients
+the public key plus reachable host and port; there is no administrative network
+listener and no automatic external-address discovery.
 
-```sh
-bin/lncli --lnddir="$HOME/.lnd-tower" create
-```
+The scanner retries failed blocks without advancing its durable cursor, replays
+replacement blocks after a reorganization, and durably retains reconstructed
+recovery transactions for rebroadcast. RPC errors and rejected broadcasts make
+readiness fail. This does not provide automatic fee bumping. Retained remedies
+are not automatically pruned; monitor storage and inspect persistent errors.
 
-Save recovery material securely. Never import a channel wallet or use
-`noseedbackup` for a production tower. No wallet funding is required.
-After later restarts, unlock using LND's unlock mechanism and protect any
-unattended-unlock credential.
-
-```sh
-bin/lncli --lnddir="$HOME/.lnd-tower" getinfo
-bin/lncli --lnddir="$HOME/.lnd-tower" tower info
-```
-
-Wait for synchronization and listener readiness. Record the tower public key.
-For remote clients, set `[listeners].bind` in the shared source and regenerate.
-Allow TCP 9911 only from intended clients. The renderer does not configure
-external-address advertisement; give clients the reachable tower address explicitly. This is an encrypted native protocol, not HTTP. Keep RPC/REST private.
-
-A global LND session admission cap has not been established. Restricted access,
-storage quotas and monitoring are needed before considering open registration.
+Reward-paying sessions and automatic Tor onion provisioning are unsupported.
+Network admission controls and resource limits are still required before offering
+access to other users; no global session quota is currently implemented.
 
 ## Verify both independently
 
-Check TEOS backend reachability and scanner progress, plus LND readiness and
-tower logs. Follow CLIENTS.md and verify client acknowledgements. A listening
+Check TEOS backend reachability and scanner progress, plus `teos-lnd` status freshness, readiness and
+logs. Follow CLIENTS.md and verify client acknowledgements. A listening
 port or registration is not proof that a revoked state was stored. Keep both
 processes independently restartable. See OPERATIONS.md for recovery guidance.
 

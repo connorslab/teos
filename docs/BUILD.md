@@ -25,14 +25,14 @@ The default CLN/TEOS build is complete. For optional LND support, also run:
 ```sh
 mkdir -p bin
 (cd lnd && GOTOOLCHAIN=local go build -mod=readonly \
-  -tags='watchtowerrpc wtclientrpc signrpc walletrpc chainrpc invoicesrpc routerrpc' \
-  -o ../bin/ ./cmd/lnd ./cmd/lncli)
+  -o ../bin/ ./cmd/teos-lnd ./cmd/teos-lnd-migrate)
 ```
 
 Outputs: `target/release/teosd`, `target/release/teos-cli`,
-`target/release/watchtower-client`, `bin/lnd`, and `bin/lncli`.
-The bundled LND source includes local Go modules, the XBT wire replacement and
-the watchtower network handshake changes. No external patch application is needed.
+`target/release/watchtower-client`, and optionally `bin/teos-lnd` and
+`bin/teos-lnd-migrate`. The migration helper is an offline tool, not a service.
+No external patches are required. The pinned LND source remains in-tree for its
+libraries and client tooling, but the full LND daemon is not built by these steps.
 
 For constrained builds use `CARGO_BUILD_JOBS=1`, `GOMAXPROCS=1`, `GOFLAGS=-p=1`,
 `GOMEMLIMIT=600MiB`, and `GOGC=50`. These reduce concurrency, but do not guarantee
@@ -42,7 +42,7 @@ that a given memory limit is sufficient.
 
 ```sh
 cargo test --locked --workspace
-(cd lnd && GOTOOLCHAIN=local go test -mod=readonly ./watchtower/...)
+(cd lnd && GOTOOLCHAIN=local go test -mod=readonly ./cmd/teos-lnd ./cmd/teos-lnd-migrate ./watchtower/...)
 ```
 
 The XBT polling integration tests use mock RPC fixtures. Live breach tests require

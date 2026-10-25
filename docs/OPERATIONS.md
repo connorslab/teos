@@ -8,8 +8,9 @@ require restarting the other or a channel node. Monitor both separately.
 
 Track node synchronization, backend availability, TEOS scanner progress, storage
 headroom, backup freshness, pending remedies and broadcast/confirmation failures.
-LND's node sync and listener readiness do not independently prove the native
-lookout's durable cursor. Inspect its logs and verify client acknowledgements.
+For `teos-lnd`, require an active process and fresh `status.json` with `ready=true`,
+then inspect its persisted scan height/hash and retained-remedy errors. Verify
+client acknowledgements separately; listener readiness is insufficient.
 On clients, monitor registration expiry, slots, sessions and pending/invalid work.
 Session existence or TCP reachability alone is not a complete protection check.
 

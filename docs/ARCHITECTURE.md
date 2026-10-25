@@ -1,33 +1,44 @@
-# Architecture and implementation status
+# Architecture
 
-TEOS serves CLN appointments. Optional LND support serves the separate native
-LND watchtower protocol. These protocols require different session handling,
-cryptography, identities and persistence; they are not interchangeable.
+One configuration selects two independent protocol backends:
 
-## Implemented
+| Backend | Clients | Runtime |
+| --- | --- | --- |
+| `teosd` | CLN watchtower plugin | Rust TEOS appointment server |
+| `teos-lnd` (optional) | XBT LND watchtower clients | Go tower-only server |
 
-- One `watchtower.toml` owns network, Knots RPC endpoint/cookie and public bind.
-- `tools/configure.py` renders the selected backend configurations without
-  restarting processes. LND generation is opt-in with `[lnd].enabled = true`.
-- CLN-only builds and deployments do not require the Go toolchain or LND daemon.
-- Both backends can operate simultaneously, with independent databases and IDs.
+The shared renderer owns network, Knots RPC authentication and public bind.
+Neither backend starts or restarts the other. CLN-only installations need no Go
+runtime or LND executable. Separate identities and databases are intentional:
+the protocols have different authentication, sessions and encrypted payloads.
 
-## Current limitation
+## Native LND backend
 
-The native-protocol backend still builds and runs the full LND daemon from `lnd/`.
-It requires wallet initialization and unlock even though tower operation needs no
-channel funding. Bundling this source and generating its configuration is not a
-standalone LND watchtower integration. No shared database, shared chain scanner,
-or single-process runtime is implemented.
+`teos-lnd` uses LND's Brontide transport, `wtserver`, `wtdb`, encrypted blob decoding
+and justice-transaction construction. It supplies its own persistent identity,
+Knots RPC adapter and sequential block scanner. It does not initialize a wallet,
+channel manager, routing graph, gossip service or LND RPC/REST listeners.
 
-## Standalone backend work remaining
+The pinned LND library source remains in-tree. This is library reuse, not a wrapper
+that launches the full LND daemon. Some transitive library dependencies remain;
+source-tree size does not represent the running services.
 
-The intended next step is a tower-only Go executable using LND's watchtower
-packages, with explicit identity persistence, chain notification and transaction
-broadcast adapters. It must avoid initializing a channel wallet or peer node.
-Before replacing the current backend, verify existing tower identity/database
-compatibility, native client enrollment and acknowledgements, restart/reorg
-recovery and breach recovery on disposable XBT regtest networks. Existing tower
-identities and acknowledged sessions must survive migration. Until that is
-implemented and tested, the setup guide deliberately documents the full-daemon
-requirement rather than advertising a standalone feature that does not exist.
+A new database records the current chain tip before accepting clients. An imported
+database uses its existing cursor, or requires an explicit conservative starting
+height when no cursor exists. Blocks are scanned in order. Failed reads and writes
+leave the cursor behind the unprocessed block. Reorganizations walk back through
+orphan headers to the common ancestor and replay the replacement chain.
+
+For matching encrypted backups, reconstructed recovery transactions are committed
+to a separate bucket in the same Bolt database before advancing the cursor.
+Transactions are rebroadcast after restart and reorganization. Already-confirmed
+RPC responses are accepted; other failures are reported through readiness. There
+is no automatic fee replacement or pruning of retained remedies.
+
+## Limits
+
+This remains experimental. See COVERAGE.md for commitment-type limits. It supports
+altruist sessions, not paid/reward sessions, and does not provision Tor services.
+The RPC backend must retain all blocks needed for catch-up. There is no shared
+scanner or shared database between CLN and LND, and no automatic migration of an
+existing full-daemon tower. Follow MIGRATION.md before replacing one.
