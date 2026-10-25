@@ -1,0 +1,13 @@
+/target/
+/bin/
+__pycache__/
+*.pyc
+.env
+*.age
+*.sqlite
+*.sql3
+*.db
+*.pem
+*.key
+/lnd/lnd
+/lnd/lncli

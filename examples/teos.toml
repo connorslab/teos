@@ -1,0 +1,14 @@
+# Replace the cookie path; never commit real credentials.
+btc_network = "mainnet"
+btc_rpc_connect = "127.0.0.1"
+btc_rpc_port = 8332
+btc_rpc_cookie = "/absolute/path/to/knots/.cookie"
+api_bind = "127.0.0.1"
+api_port = 9814
+rpc_bind = "127.0.0.1"
+rpc_port = 8814
+internal_api_bind = "127.0.0.1"
+internal_api_port = 50051
+force_update = false
+max_registered_users = 100
+renewal_slot_topups = false

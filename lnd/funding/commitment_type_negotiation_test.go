@@ -1,0 +1,562 @@
+package funding
+
+import (
+	"testing"
+
+	"github.com/lightningnetwork/lnd/lnwallet"
+	"github.com/lightningnetwork/lnd/lnwire"
+	"github.com/stretchr/testify/require"
+)
+
+// TestCommitmentTypeNegotiation tests all of the possible paths of a channel
+// commitment type negotiation.
+func TestCommitmentTypeNegotiation(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name              string
+		channelFeatures   *lnwire.RawFeatureVector
+		localFeatures     *lnwire.RawFeatureVector
+		remoteFeatures    *lnwire.RawFeatureVector
+		expectsCommitType lnwallet.CommitmentType
+		expectsChanType   *lnwire.ChannelType
+		zeroConf          bool
+		scidAlias         bool
+		expectsErr        error
+	}{
+		{
+			name: "explicit type without remote negotiation bit",
+			channelFeatures: lnwire.NewRawFeatureVector(
+				lnwire.StaticRemoteKeyRequired,
+				lnwire.AnchorsZeroFeeHtlcTxRequired,
+			),
+			localFeatures: lnwire.NewRawFeatureVector(
+				lnwire.StaticRemoteKeyRequired,
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+			),
+			remoteFeatures: lnwire.NewRawFeatureVector(
+				lnwire.StaticRemoteKeyOptional,
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+			),
+			expectsCommitType: lnwallet.CommitmentTypeAnchorsZeroFeeHtlcTx,
+			expectsChanType: (*lnwire.ChannelType)(
+				lnwire.NewRawFeatureVector(
+					lnwire.StaticRemoteKeyRequired,
+					lnwire.AnchorsZeroFeeHtlcTxRequired,
+				),
+			),
+			expectsErr: nil,
+		},
+		{
+			name: "explicit missing remote commitment feature",
+			channelFeatures: lnwire.NewRawFeatureVector(
+				lnwire.StaticRemoteKeyRequired,
+				lnwire.AnchorsZeroFeeHtlcTxRequired,
+			),
+			localFeatures: lnwire.NewRawFeatureVector(
+				lnwire.StaticRemoteKeyRequired,
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+			),
+			remoteFeatures: lnwire.NewRawFeatureVector(
+				lnwire.StaticRemoteKeyOptional,
+			),
+			expectsErr: errUnsupportedChannelType,
+		},
+		{
+			name: "explicit zero-conf script enforced",
+			channelFeatures: lnwire.NewRawFeatureVector(
+				lnwire.ZeroConfRequired,
+				lnwire.StaticRemoteKeyRequired,
+				lnwire.AnchorsZeroFeeHtlcTxRequired,
+				lnwire.ScriptEnforcedLeaseRequired,
+			),
+			localFeatures: lnwire.NewRawFeatureVector(
+				lnwire.ZeroConfOptional,
+				lnwire.StaticRemoteKeyRequired,
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+				lnwire.ScriptEnforcedLeaseOptional,
+			),
+			remoteFeatures: lnwire.NewRawFeatureVector(
+				lnwire.ZeroConfOptional,
+				lnwire.StaticRemoteKeyOptional,
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+				lnwire.ScriptEnforcedLeaseOptional,
+			),
+			expectsCommitType: lnwallet.CommitmentTypeScriptEnforcedLease,
+			expectsChanType: (*lnwire.ChannelType)(
+				lnwire.NewRawFeatureVector(
+					lnwire.ZeroConfRequired,
+					lnwire.StaticRemoteKeyRequired,
+					lnwire.AnchorsZeroFeeHtlcTxRequired,
+					lnwire.ScriptEnforcedLeaseRequired,
+				),
+			),
+			zeroConf:   true,
+			expectsErr: nil,
+		},
+		{
+			name: "explicit zero-conf anchors",
+			channelFeatures: lnwire.NewRawFeatureVector(
+				lnwire.ZeroConfRequired,
+				lnwire.StaticRemoteKeyRequired,
+				lnwire.AnchorsZeroFeeHtlcTxRequired,
+			),
+			localFeatures: lnwire.NewRawFeatureVector(
+				lnwire.ZeroConfOptional,
+				lnwire.StaticRemoteKeyRequired,
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+			),
+			remoteFeatures: lnwire.NewRawFeatureVector(
+				lnwire.ZeroConfOptional,
+				lnwire.StaticRemoteKeyOptional,
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+			),
+			expectsCommitType: lnwallet.CommitmentTypeAnchorsZeroFeeHtlcTx,
+			expectsChanType: (*lnwire.ChannelType)(
+				lnwire.NewRawFeatureVector(
+					lnwire.ZeroConfRequired,
+					lnwire.StaticRemoteKeyRequired,
+					lnwire.AnchorsZeroFeeHtlcTxRequired,
+				),
+			),
+			zeroConf:   true,
+			expectsErr: nil,
+		},
+		{
+			name: "explicit scid-alias script enforced",
+			channelFeatures: lnwire.NewRawFeatureVector(
+				lnwire.ScidAliasRequired,
+				lnwire.StaticRemoteKeyRequired,
+				lnwire.AnchorsZeroFeeHtlcTxRequired,
+				lnwire.ScriptEnforcedLeaseRequired,
+			),
+			localFeatures: lnwire.NewRawFeatureVector(
+				lnwire.ScidAliasOptional,
+				lnwire.StaticRemoteKeyRequired,
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+				lnwire.ScriptEnforcedLeaseOptional,
+			),
+			remoteFeatures: lnwire.NewRawFeatureVector(
+				lnwire.ScidAliasOptional,
+				lnwire.StaticRemoteKeyOptional,
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+				lnwire.ScriptEnforcedLeaseOptional,
+			),
+			expectsCommitType: lnwallet.CommitmentTypeScriptEnforcedLease,
+			expectsChanType: (*lnwire.ChannelType)(
+				lnwire.NewRawFeatureVector(
+					lnwire.ScidAliasRequired,
+					lnwire.StaticRemoteKeyRequired,
+					lnwire.AnchorsZeroFeeHtlcTxRequired,
+					lnwire.ScriptEnforcedLeaseRequired,
+				),
+			),
+			scidAlias:  true,
+			expectsErr: nil,
+		},
+		{
+			name: "explicit scid-alias anchors",
+			channelFeatures: lnwire.NewRawFeatureVector(
+				lnwire.ScidAliasRequired,
+				lnwire.StaticRemoteKeyRequired,
+				lnwire.AnchorsZeroFeeHtlcTxRequired,
+			),
+			localFeatures: lnwire.NewRawFeatureVector(
+				lnwire.ScidAliasOptional,
+				lnwire.StaticRemoteKeyRequired,
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+			),
+			remoteFeatures: lnwire.NewRawFeatureVector(
+				lnwire.ScidAliasOptional,
+				lnwire.StaticRemoteKeyOptional,
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+			),
+			expectsCommitType: lnwallet.CommitmentTypeAnchorsZeroFeeHtlcTx,
+			expectsChanType: (*lnwire.ChannelType)(
+				lnwire.NewRawFeatureVector(
+					lnwire.ScidAliasRequired,
+					lnwire.StaticRemoteKeyRequired,
+					lnwire.AnchorsZeroFeeHtlcTxRequired,
+				),
+			),
+			scidAlias:  true,
+			expectsErr: nil,
+		},
+		{
+			name: "explicit anchors",
+			channelFeatures: lnwire.NewRawFeatureVector(
+				lnwire.StaticRemoteKeyRequired,
+				lnwire.AnchorsZeroFeeHtlcTxRequired,
+			),
+			localFeatures: lnwire.NewRawFeatureVector(
+				lnwire.StaticRemoteKeyRequired,
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+			),
+			remoteFeatures: lnwire.NewRawFeatureVector(
+				lnwire.StaticRemoteKeyOptional,
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+			),
+			expectsCommitType: lnwallet.CommitmentTypeAnchorsZeroFeeHtlcTx,
+			expectsChanType: (*lnwire.ChannelType)(
+				lnwire.NewRawFeatureVector(
+					lnwire.StaticRemoteKeyRequired,
+					lnwire.AnchorsZeroFeeHtlcTxRequired,
+				),
+			),
+			expectsErr: nil,
+		},
+		{
+			name: "explicit tweakless",
+			channelFeatures: lnwire.NewRawFeatureVector(
+				lnwire.StaticRemoteKeyRequired,
+			),
+			localFeatures: lnwire.NewRawFeatureVector(
+				lnwire.StaticRemoteKeyRequired,
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+			),
+			remoteFeatures: lnwire.NewRawFeatureVector(
+				lnwire.StaticRemoteKeyOptional,
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+			),
+			expectsCommitType: lnwallet.CommitmentTypeTweakless,
+			expectsChanType: (*lnwire.ChannelType)(
+				lnwire.NewRawFeatureVector(
+					lnwire.StaticRemoteKeyRequired,
+				),
+			),
+			expectsErr: nil,
+		},
+		{
+			name:            "explicit legacy",
+			channelFeatures: lnwire.NewRawFeatureVector(),
+			localFeatures: lnwire.NewRawFeatureVector(
+				lnwire.StaticRemoteKeyRequired,
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+			),
+			remoteFeatures: lnwire.NewRawFeatureVector(
+				lnwire.StaticRemoteKeyOptional,
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+			),
+			expectsCommitType: lnwallet.CommitmentTypeLegacy,
+			expectsChanType: (*lnwire.ChannelType)(
+				lnwire.NewRawFeatureVector(),
+			),
+			expectsErr: nil,
+		},
+		// No desired channel type is set, so we expect the default
+		// selection to return the corresponding chan type feature bits,
+		// which are then signaled on the wire.
+		{
+			name:            "default anchors",
+			channelFeatures: nil,
+			localFeatures: lnwire.NewRawFeatureVector(
+				lnwire.StaticRemoteKeyRequired,
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+			),
+			remoteFeatures: lnwire.NewRawFeatureVector(
+				lnwire.StaticRemoteKeyOptional,
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+			),
+			expectsCommitType: lnwallet.CommitmentTypeAnchorsZeroFeeHtlcTx,
+			expectsChanType: (*lnwire.ChannelType)(
+				lnwire.NewRawFeatureVector(
+					lnwire.StaticRemoteKeyRequired,
+					lnwire.AnchorsZeroFeeHtlcTxRequired,
+				),
+			),
+			expectsErr: nil,
+		},
+		{
+			name:            "default tweakless",
+			channelFeatures: nil,
+			localFeatures: lnwire.NewRawFeatureVector(
+				lnwire.StaticRemoteKeyRequired,
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+			),
+			remoteFeatures: lnwire.NewRawFeatureVector(
+				lnwire.StaticRemoteKeyOptional,
+			),
+			expectsCommitType: lnwallet.CommitmentTypeTweakless,
+			expectsChanType: (*lnwire.ChannelType)(
+				lnwire.NewRawFeatureVector(
+					lnwire.StaticRemoteKeyRequired,
+				),
+			),
+			expectsErr: nil,
+		},
+		{
+			name:            "default legacy",
+			channelFeatures: nil,
+			localFeatures:   lnwire.NewRawFeatureVector(),
+			remoteFeatures: lnwire.NewRawFeatureVector(
+				lnwire.StaticRemoteKeyOptional,
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+			),
+			expectsCommitType: lnwallet.CommitmentTypeLegacy,
+			expectsChanType: (*lnwire.ChannelType)(
+				lnwire.NewRawFeatureVector(),
+			),
+			expectsErr: nil,
+		},
+
+		// Test cases for final taproot channels with explicit
+		// negotiation.
+		{
+			name: "explicit simple taproot final only",
+			channelFeatures: lnwire.NewRawFeatureVector(
+				lnwire.SimpleTaprootChannelsRequiredFinal,
+			),
+			localFeatures: lnwire.NewRawFeatureVector(
+				lnwire.SimpleTaprootChannelsOptionalFinal,
+			),
+			remoteFeatures: lnwire.NewRawFeatureVector(
+				lnwire.SimpleTaprootChannelsOptionalFinal,
+			),
+			expectsCommitType: lnwallet.CommitmentTypeSimpleTaprootFinal, //nolint:ll
+			expectsChanType: (*lnwire.ChannelType)(
+				lnwire.NewRawFeatureVector(
+					lnwire.SimpleTaprootChannelsRequiredFinal, //nolint:ll
+				),
+			),
+			expectsErr: nil,
+		},
+		{
+			name: "explicit simple taproot final with scid alias",
+			channelFeatures: lnwire.NewRawFeatureVector(
+				lnwire.SimpleTaprootChannelsRequiredFinal,
+				lnwire.ScidAliasRequired,
+			),
+			localFeatures: lnwire.NewRawFeatureVector(
+				lnwire.SimpleTaprootChannelsOptionalFinal,
+				lnwire.ScidAliasOptional,
+			),
+			remoteFeatures: lnwire.NewRawFeatureVector(
+				lnwire.SimpleTaprootChannelsOptionalFinal,
+				lnwire.ScidAliasOptional,
+			),
+			expectsCommitType: lnwallet.CommitmentTypeSimpleTaprootFinal, //nolint:ll
+			expectsChanType: (*lnwire.ChannelType)(
+				lnwire.NewRawFeatureVector(
+					lnwire.SimpleTaprootChannelsRequiredFinal, //nolint:ll
+					lnwire.ScidAliasRequired,
+				),
+			),
+			scidAlias:  true,
+			expectsErr: nil,
+		},
+		{
+			name: "explicit simple taproot final with zero conf",
+			channelFeatures: lnwire.NewRawFeatureVector(
+				lnwire.SimpleTaprootChannelsRequiredFinal,
+				lnwire.ZeroConfRequired,
+			),
+			localFeatures: lnwire.NewRawFeatureVector(
+				lnwire.SimpleTaprootChannelsOptionalFinal,
+				lnwire.ZeroConfOptional,
+			),
+			remoteFeatures: lnwire.NewRawFeatureVector(
+				lnwire.SimpleTaprootChannelsOptionalFinal,
+				lnwire.ZeroConfOptional,
+			),
+			expectsCommitType: lnwallet.CommitmentTypeSimpleTaprootFinal, //nolint:ll
+			expectsChanType: (*lnwire.ChannelType)(
+				lnwire.NewRawFeatureVector(
+					lnwire.SimpleTaprootChannelsRequiredFinal, //nolint:ll
+					lnwire.ZeroConfRequired,
+				),
+			),
+			zeroConf:   true,
+			expectsErr: nil,
+		},
+		{
+			name: "explicit simple taproot final with scid alias " +
+				"and zero conf",
+			channelFeatures: lnwire.NewRawFeatureVector(
+				lnwire.SimpleTaprootChannelsRequiredFinal,
+				lnwire.ScidAliasRequired,
+				lnwire.ZeroConfRequired,
+			),
+			localFeatures: lnwire.NewRawFeatureVector(
+				lnwire.SimpleTaprootChannelsOptionalFinal,
+				lnwire.ScidAliasOptional,
+				lnwire.ZeroConfOptional,
+			),
+			remoteFeatures: lnwire.NewRawFeatureVector(
+				lnwire.SimpleTaprootChannelsOptionalFinal,
+				lnwire.ScidAliasOptional,
+				lnwire.ZeroConfOptional,
+			),
+			expectsCommitType: lnwallet.CommitmentTypeSimpleTaprootFinal, //nolint:ll
+			expectsChanType: (*lnwire.ChannelType)(
+				lnwire.NewRawFeatureVector(
+					lnwire.SimpleTaprootChannelsRequiredFinal, //nolint:ll
+					lnwire.ScidAliasRequired,
+					lnwire.ZeroConfRequired,
+				),
+			),
+			scidAlias:  true,
+			zeroConf:   true,
+			expectsErr: nil,
+		},
+		{
+			name: "explicit simple taproot final missing " +
+				"remote support",
+			channelFeatures: lnwire.NewRawFeatureVector(
+				lnwire.SimpleTaprootChannelsRequiredFinal,
+			),
+			localFeatures: lnwire.NewRawFeatureVector(
+				lnwire.SimpleTaprootChannelsOptionalFinal,
+			),
+			remoteFeatures: lnwire.NewRawFeatureVector(
+				lnwire.SimpleTaprootChannelsOptionalStaging,
+			),
+			expectsErr: errUnsupportedChannelType,
+		},
+
+		// Test cases for default negotiation ignoring taproot feature
+		// bits. Taproot channels require an explicit channel type.
+		{
+			//nolint:ll
+			name:            "default anchors preferred over taproot",
+			channelFeatures: nil,
+			localFeatures: lnwire.NewRawFeatureVector(
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+				lnwire.SimpleTaprootChannelsOptionalFinal,
+				lnwire.SimpleTaprootChannelsOptionalStaging,
+			),
+			remoteFeatures: lnwire.NewRawFeatureVector(
+				lnwire.AnchorsZeroFeeHtlcTxOptional,
+				lnwire.SimpleTaprootChannelsOptionalFinal,
+				lnwire.SimpleTaprootChannelsOptionalStaging,
+			),
+			expectsCommitType: lnwallet.CommitmentTypeAnchorsZeroFeeHtlcTx, //nolint:ll
+			expectsChanType: (*lnwire.ChannelType)(
+				lnwire.NewRawFeatureVector(
+					lnwire.StaticRemoteKeyRequired,
+					lnwire.AnchorsZeroFeeHtlcTxRequired,
+				),
+			),
+			expectsErr: nil,
+		},
+		{
+			//nolint:ll
+			name:            "default ignores staging taproot without anchors",
+			channelFeatures: nil,
+			localFeatures: lnwire.NewRawFeatureVector(
+				lnwire.SimpleTaprootChannelsOptionalFinal,
+				lnwire.SimpleTaprootChannelsOptionalStaging,
+			),
+			remoteFeatures: lnwire.NewRawFeatureVector(
+				lnwire.SimpleTaprootChannelsOptionalStaging,
+			),
+			expectsCommitType: lnwallet.CommitmentTypeLegacy,
+			expectsChanType: (*lnwire.ChannelType)(
+				lnwire.NewRawFeatureVector(),
+			),
+			expectsErr: nil,
+		},
+		{
+			//nolint:ll
+			name:            "default ignores final taproot without anchors",
+			channelFeatures: nil,
+			localFeatures: lnwire.NewRawFeatureVector(
+				lnwire.SimpleTaprootChannelsOptionalFinal,
+			),
+			remoteFeatures: lnwire.NewRawFeatureVector(
+				lnwire.SimpleTaprootChannelsOptionalFinal,
+			),
+			expectsCommitType: lnwallet.CommitmentTypeLegacy,
+			expectsChanType: (*lnwire.ChannelType)(
+				lnwire.NewRawFeatureVector(),
+			),
+			expectsErr: nil,
+		},
+	}
+
+	for _, testCase := range testCases {
+		ok := t.Run(testCase.name, func(t *testing.T) {
+			localFeatures := lnwire.NewFeatureVector(
+				testCase.localFeatures, lnwire.Features,
+			)
+			remoteFeatures := lnwire.NewFeatureVector(
+				testCase.remoteFeatures, lnwire.Features,
+			)
+
+			var channelType *lnwire.ChannelType
+			if testCase.channelFeatures != nil {
+				channelType = new(lnwire.ChannelType)
+				*channelType = lnwire.ChannelType(
+					*testCase.channelFeatures,
+				)
+			}
+
+			lChan, lCommit, err := negotiateCommitmentType(
+				channelType, localFeatures, remoteFeatures,
+			)
+
+			var (
+				localZc    bool
+				localScid  bool
+				remoteZc   bool
+				remoteScid bool
+			)
+
+			if lChan != nil {
+				localFv := lnwire.RawFeatureVector(*lChan)
+				localZc = localFv.IsSet(
+					lnwire.ZeroConfRequired,
+				)
+				localScid = localFv.IsSet(
+					lnwire.ScidAliasRequired,
+				)
+			}
+
+			require.Equal(t, testCase.zeroConf, localZc)
+			require.Equal(t, testCase.scidAlias, localScid)
+			require.Equal(t, testCase.expectsErr, err)
+
+			rChan, rCommit, err := negotiateCommitmentType(
+				channelType, remoteFeatures, localFeatures,
+			)
+
+			if rChan != nil {
+				remoteFv := lnwire.RawFeatureVector(*rChan)
+				remoteZc = remoteFv.IsSet(
+					lnwire.ZeroConfRequired,
+				)
+				remoteScid = remoteFv.IsSet(
+					lnwire.ScidAliasRequired,
+				)
+			}
+
+			require.Equal(t, testCase.zeroConf, remoteZc)
+			require.Equal(t, testCase.scidAlias, remoteScid)
+			require.Equal(t, testCase.expectsErr, err)
+
+			if testCase.expectsErr != nil {
+				return
+			}
+
+			require.Equal(
+				t, testCase.expectsCommitType, lCommit,
+				testCase.name,
+			)
+			require.Equal(
+				t, testCase.expectsCommitType, rCommit,
+				testCase.name,
+			)
+
+			require.Equal(
+				t, testCase.expectsChanType, lChan,
+				testCase.name,
+			)
+			require.Equal(
+				t, testCase.expectsChanType, rChan,
+				testCase.name,
+			)
+		})
+		if !ok {
+			return
+		}
+	}
+}

@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+exclude = ["vendor/bitcoin", "vendor/lightning-block-sync-0.1.0"]
+
+members = [
+    "teos",
+    "teos-common",
+    "watchtower-plugin"
+]
+
+[patch.crates-io]
+bitcoin = { path = "vendor/bitcoin" }
+lightning-block-sync = { path = "vendor/lightning-block-sync-0.1.0" }
