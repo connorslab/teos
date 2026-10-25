@@ -536,9 +536,8 @@ func run() error {
 				}
 			}
 		}
-		if err == nil {
-			err = broadcast(backend, r)
-		}
+		// A failed scan must not starve remedies already durably queued.
+		err = errors.Join(err, broadcast(backend, r))
 		tip, e := db.GetLookoutTip()
 		if e != nil {
 			return e

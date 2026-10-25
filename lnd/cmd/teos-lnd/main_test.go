@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
 	"github.com/btcsuite/btcd/chaincfg/v2"
 	"github.com/lightningnetwork/lnd/brontide"
@@ -9,6 +11,9 @@ import (
 	"github.com/lightningnetwork/lnd/watchtower/wtserver"
 	"github.com/lightningnetwork/lnd/watchtower/wtwire"
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -258,5 +263,50 @@ func TestNativeEnrollmentAndAcknowledgement(t *testing.T) {
 	matches, e := db.QueryMatches([]blob.BreachHint{hint})
 	if e != nil || len(matches) != 1 {
 		t.Fatal("acknowledged update not durable")
+	}
+}
+
+func TestBroadcastRetriesAllAndKeepsQueue(t *testing.T) {
+	dir := t.TempDir()
+	backend, e := kvdb.GetBoltBackend(&kvdb.BoltBackendConfig{DBPath: dir, DBFileName: "watchtower.db", DBTimeout: time.Second})
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer backend.Close()
+	for i := int32(1); i <= 2; i++ {
+		if e = enqueue(backend, wire.NewMsgTx(i)); e != nil {
+			t.Fatal(e)
+		}
+	}
+	cookie := filepath.Join(dir, "cookie")
+	if e = os.WriteFile(cookie, []byte("tower:secret"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	calls := 0
+	reject := true
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, p, ok := r.BasicAuth()
+		if !ok || u != "tower" || p != "secret" {
+			t.Error("missing cookie authentication")
+		}
+		calls++
+		if reject {
+			json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"code": -26, "message": "fee rejected"}})
+		} else {
+			json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"code": -27, "message": "already confirmed"}})
+		}
+	}))
+	defer server.Close()
+	client := &rpc{server.URL, cookie, server.Client(), context.Background()}
+	if e = broadcast(backend, client); e == nil || calls != 2 {
+		t.Fatal("failure must be surfaced without starving other remedies")
+	}
+	reject = false
+	if e = broadcast(backend, client); e != nil || calls != 4 {
+		t.Fatal("retry did not accept confirmed transactions")
+	}
+	totals, e := counts(backend)
+	if e != nil || totals["retained_remedies"] != 2 {
+		t.Fatal("queue lost")
 	}
 }
